@@ -59,7 +59,7 @@ def _run_bls_analysis(lc : lk.LightCurve) -> dict :
     }
     return result
 
-def _mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
+def mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
     """
     Masque les transits d'une planète pour permettre 
     la recherche de signaux plus faibles (d'autre planètes).
@@ -93,7 +93,7 @@ def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list :
             planets_found.append(result)
 
             #On masque la planète pour le tour suivant
-            current_lc = _mask_planet(current_lc,result)
+            current_lc = mask_planet(current_lc,result)
         else : 
             if len(planets_found) == 0 : 
                 logger.info("Fin de recherche : aucun signal significatif.")
