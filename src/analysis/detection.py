@@ -2,7 +2,7 @@ import lightkurve as lk
 import logging
 import numpy as np 
 
-##gestion d'erreur
+##gestion de log
 logger = logging.getLogger(__name__)
 
 def _get_search_params(lc : lk.LightCurve) -> int:
@@ -27,7 +27,7 @@ def _get_search_params(lc : lk.LightCurve) -> int:
 
     return min_period, max_period, steps
 
-def _run_bls_analysis(lc : lk.LightCurve) -> {} : 
+def _run_bls_analysis(lc : lk.LightCurve) -> dict : 
     """
     Exécute l'algorithme BLS et extrait les 
     statistiques du meilleur pic.
@@ -59,7 +59,7 @@ def _run_bls_analysis(lc : lk.LightCurve) -> {} :
     }
     return result
 
-def _mask_planet(lc : lk.LightCurve, planet_info : {}) ->  lk.LightCurve :
+def _mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
     """
     Masque les transits d'une planète pour permettre 
     la recherche de signaux plus faibles (d'autre planètes).
@@ -74,7 +74,7 @@ def _mask_planet(lc : lk.LightCurve, planet_info : {}) ->  lk.LightCurve :
     #On garde que les point qui ne sont pas le masque 
     return  lc[~masque]
 
-def planet_detector(lc : lk.LightCurve, max_planets=10 : int) -> {}: 
+def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list : 
     """
     fonction principale : Cherche des planètes jusqu'à ce que 
     le signal soit trop faible ou le maximum atteint (sécurité contre les boucles infinies).
