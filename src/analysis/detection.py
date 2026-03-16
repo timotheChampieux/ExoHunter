@@ -1,69 +1,109 @@
 import lightkurve as lk
 import logging
 import numpy as np 
+
 ##gestion d'erreur
 logger = logging.getLogger(__name__)
 
 def _get_search_params(lc : lk.LightCurve) :
-
+    """
+    Calcule les meilleurs paramètres  pour la recherche BLS 
+    en fonction de la durée des données (nombre de quarter donné par l'user).
+    """
+    #durée en jour
     observation_time = lc.time.value.max() - lc.time.value.min()
+
 
     max_period = observation_time/3
     min_period = 0.5
+    
+
+    if max_period <= min_period:
+        logger.warning("Durée d'observation trop courte. Ajustement des périodes.")
+        max_period = min_period + 1
+
+    #Nombre de tests proportionnel à la durée
     steps = int(observation_time * 500)
 
-    if max_period < min_period :
-        return max_period+min_period,steps,min_period
-
-    return max_period,steps,min_period 
+    return min_period, max_period, steps
 
 def _run_bls_analysis(lc) : 
+    """
+    Exécute l'algorithme BLS et extrait les 
+    statistiques du meilleur pic.
+    """
     max_p, steps,min_p  = _get_search_params(lc)
 
     periods =  np.linspace(min_p,max_p,steps)
+
+    #calcul du periodigramme bls
     bls = lc.to_periodogram(method='bls',period=periods)
     
+    #on recup le meilleur condidat
     best_period = bls.period_at_max_power
     best_t0 = bls.transit_time_at_max_power
     best_duration = bls.duration_at_max_power
 
+    #calcul stat detaillees
     stats = bls.compute_stats(period=best_period, 
                             duration=best_duration, 
                             transit_time=best_t0)
 
-    snr = stats['snr']
+    
+    
 
     result = {
         "period": best_period.value,
         "transit_time": best_t0.value,
         "duration": best_duration.value,
-        "snr": snr,
+        #si le snr > 7 on decrete que il y a une planète
+        "snr":  stats['snr'],
         "max_power": bls.max_power.value
     }
     return result
+
 def _mask_planet(lc, planet_info) :
+    """
+    Masque les transits d'une planète pour permettre 
+    la recherche de signaux plus faibles (d'autre planètes).
+    """
+    #On utilise un facteur de 3 sur la durée pour etre sur de bien masquer le transit
+    masque = lc.create_transit_mask(
+        period=planet_info["period"], 
+        transit_time=planet_info["transit_time"], 
+        duration=planet_info["duration"] * 3
+    )
 
-    period,transit_time,duration = planet_info["period"],planet_info["transit_time"],planet_info["duration"]
-
-    masque = lc.create_transit_mask(period=period, transit_time=transit_time, duration=duration*3)
-
-    lc_propre = lc[~masque]
-    return lc_propre
+    #On garde que les point qui ne sont pas le masque 
+    return  lc[~masque]
 
 def planet_detector(lc : lk.LightCurve, max_planets=10) : 
+    """
+    fonction principale : Cherche des planètes jusqu'à ce que 
+    le signal soit trop faible ou le maximum atteint (sécurité contre les boucles infinies).
+    """
 
     planets_found = []
     current_lc = lc
 
     while len(planets_found)<max_planets : 
-
+        #analyse de la courbe actuelle
         result = _run_bls_analysis(current_lc)
         
+        #critère de validation
         if result["snr"] > 7 : 
+            logger.info(f"Planète détectée ! Période: {result['period']:.3f} j | SNR: {result['snr']:.2f}")
             planets_found.append(result)
+
+            #On masque la planète pour le tour suivant
             current_lc = _mask_planet(current_lc,result)
         else : 
-            return planets_found
+            if len(planets_found) == 0 : 
+                logger.info("Fin de recherche : aucun signal significatif.")
+            logger.info("Fin de recherche : aucun signal supplémentaire significatif.")
+            break
+            
+    return planets_found
 
 
       
