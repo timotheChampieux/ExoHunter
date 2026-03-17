@@ -4,7 +4,7 @@ import logging
 ##gestion d'erreur
 logger = logging.getLogger(__name__)
 
-def lc_cleaner(lc : lk.Light_Curve, window_length=401, sigma: int = 5) -> lk.LightCurve :
+def lc_cleaner(lc : lk.LightCurve, window_length:int = 401, sigma: int = 5) -> lk.LightCurve :
     
     try: 
         #On garde le nombre de point pour verifier que le cleaner n'a pas enlevé tout la courbe par erreur
