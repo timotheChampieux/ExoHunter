@@ -4,14 +4,16 @@ import logging
 ##gestion d'erreur
 logger = logging.getLogger(__name__)
 
-def lc_cleaner(lc : lk.LightCurve, window_length:int = 401, sigma: int = 5) -> lk.LightCurve :
-    
+def lc_cleaner(lc : lk.LightCurve, window_length:int = 801, sigma: int = 5) -> lk.LightCurve :
+    """ 
+    Nettoie la courbe de lumière. Attention : window_length doit être > 3x la durée d'un transit. 
+    """
     try: 
         #On garde le nombre de point pour verifier que le cleaner n'a pas enlevé tout la courbe par erreur
         initial_length = len(lc)
         
         #on nettoie (outliers retire les pics de lumière parasite et flatten corrige les variation de l'etoile)
-        lc_clean = lc.remove_nans().remove_outliers(sigma=sigma).flatten(window_length=window_length)
+        lc_clean = lc.remove_outliers(sigma=sigma).flatten(window_length=window_length)
         
         final_length = len(lc_clean)
         

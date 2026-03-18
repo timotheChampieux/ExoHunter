@@ -5,83 +5,46 @@ import numpy as np
 ##gestion de log
 logger = logging.getLogger(__name__)
 
-def _get_search_params(lc : lk.LightCurve) -> int:
-    """
-    Calcule les meilleurs paramètres  pour la recherche BLS 
-    en fonction de la durée des données (nombre de quarter donné par l'user).
-    """
-    #durée en jour
-    observation_time = lc.time.value.max() - lc.time.value.min()
-
-
-    max_period = observation_time/3
-    min_period = 0.5
-    
-
-    if max_period <= min_period:
-        logger.warning("Durée d'observation trop courte. Ajustement des périodes.")
-        max_period = min_period + 1
-
-    #Nombre de tests proportionnel à la durée
-    steps = int(observation_time * 500)
-
-    return min_period, max_period, steps
-
 def _run_bls_analysis(lc : lk.LightCurve) -> dict : 
     """
     Exécute l'algorithme BLS et extrait les 
     statistiques du meilleur pic.
     """
-    min_p, max_p, steps = _get_search_params(lc)
+    #min_p, max_p, steps = _get_search_params(lc)
 
-    periods =  np.linspace(min_p,max_p,steps)
-
-    #calcul du periodigramme bls
-    bls = lc.to_periodogram(method='bls',period=periods)
+     #beaucoup plus précis que np.linspace pour détecter des transits courts.
+    bls = lc.to_periodogram(method='bls', minimum_period=0.5, maximum_period=lc.time.value.max()/2)
     
     #on recup le meilleur condidat
     best_period = bls.period_at_max_power
     best_t0 = bls.transit_time_at_max_power
     best_duration = bls.duration_at_max_power
 
-    #calcul stat detaillees
-    stats = bls.compute_stats(period=best_period, 
-                            duration=best_duration, 
-                            transit_time=best_t0)
-    best_snr = np.nanmax(bls.snr).value
-    result = {
+    # Calcul des stats pour obtenir le SNR correct
+    stats = bls.compute_stats(period=best_period, duration=best_duration, transit_time=best_t0)
+    
+    return {
         "period": best_period.value,
         "transit_time": best_t0.value,
         "duration": best_duration.value,
-        #si le snr > 7 on decrete que il y a une planète
-        "snr":  best_snr,
+        "snr": np.nanmax(bls.snr).value,
         "max_power": bls.max_power.value
     }
-    return result
 
 def mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
     """
     Masque les transits d'une planète pour permettre 
     la recherche de signaux plus faibles (d'autre planètes).
     """
-    #On utilise un facteur de 3 sur la durée pour etre sur de bien masquer le transit
-    masque = lc.create_transit_mask(
+    #On utilise un facteur de 2 sur la durée pour etre sur de bien masquer le transit
+    mask = lc.create_transit_mask(
         period=planet_info["period"], 
         transit_time=planet_info["transit_time"], 
-        duration=planet_info["duration"] * 3
+        duration=planet_info["duration"] * 2
     )
 
      #On filtre la courbe
-    lc_masked = lc[~masque]
-
-    #On creer une nouvelle courbe pour eviter les soucis de chevauchement de masque
-    new_lc = lk.LightCurve(
-        time=lc_masked.time.value, 
-        flux=lc_masked.flux.value, 
-        flux_err=lc_masked.flux_err.value
-    )
-
-    return  new_lc.remove_nans()
+    return lc[~mask].remove_nans()
 
 def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list : 
     """
@@ -98,7 +61,7 @@ def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list :
         result = _run_bls_analysis(current_lc)
         logger.info(f"Analyse BLS terminée.")
         #critère de validation
-        if result["snr"] > 7 : 
+        if result["snr"] > 7.1 : 
             logger.info(f"Planète détectée ! Période: {result['period']:.3f} j | SNR: {result['snr']:.2f}")
             planets_found.append(result)
             

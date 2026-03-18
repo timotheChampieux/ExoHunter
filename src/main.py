@@ -33,7 +33,7 @@ def run_pipeline():
         if not target_star:
             raise ValueError("Le nom de l'étoile est obligatoire.")
 
-        star_radius = input("Rayon de l'étoile (en R_sun) [Défaut: 1.0] : ")
+        star_radius = input("Rayon de l'étoile (en R_sun) !!! Très important !!! [Défaut: 1.0] : ")
         star_radius = float(star_radius) if star_radius else 1.0
         
         period_label = "Secteur" if mission.lower() == "tess" else "Quarter/Campaign"
@@ -54,7 +54,7 @@ def run_pipeline():
 
         if advanced == 'o':
             sigma_val = int(input("  > Seuil de nettoyage (Sigma) [Défaut: 5] : ") or 5)
-            win_len = int(input("  > Fenêtre de lissage (Window Length) [Défaut: 401] : ") or 801)
+            win_len = int(input("  > Fenêtre de lissage (Window Length) [Défaut: 801] : ") or 801)
             pts_transit = int(input("  > Résolution (Points par transit) [Défaut: 150] : ") or 70)
 
         # --- 3. EXÉCUTION DU PIPELINE ---
