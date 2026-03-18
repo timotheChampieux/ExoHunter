@@ -23,12 +23,16 @@ def _run_bls_analysis(lc : lk.LightCurve) -> dict :
     # Calcul des stats pour obtenir le SNR correct
     stats = bls.compute_stats(period=best_period, duration=best_duration, transit_time=best_t0)
     
+    odd_even_ratio = stats["odd_depth"][0] / stats["even_depth"][0] if stats["even_depth"][0] != 0 else float('inf')
+
     return {
         "period": best_period.value,
         "transit_time": best_t0.value,
         "duration": best_duration.value,
         "snr": np.nanmax(bls.snr).value,
-        "max_power": bls.max_power.value
+        "max_power": bls.max_power.value,
+        "depth_bls": stats["depth"][0],           #profondeur mesurée par le BLS
+        "odd_even_ratio": round(odd_even_ratio, 3) #ratio pair/impair pour filtrer les faux positifs
     }
 
 def mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
