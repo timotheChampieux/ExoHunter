@@ -89,7 +89,8 @@ def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list :
         else : 
             if len(planets_found) == 0 : 
                 logger.info("Fin de recherche : aucun signal significatif.")
-            logger.info("Fin de recherche : aucun signal supplémentaire significatif.")
+            else : 
+                logger.info("Fin de recherche : aucun signal supplémentaire significatif.")
             break
 
     return planets_found

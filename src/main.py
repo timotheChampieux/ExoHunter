@@ -55,7 +55,7 @@ def run_pipeline():
         if advanced == 'o':
             sigma_val = int(input("  > Seuil de nettoyage (Sigma) [Défaut: 5] : ") or 5)
             win_len = int(input("  > Fenêtre de lissage (Window Length) [Défaut: 801] : ") or 801)
-            pts_transit = int(input("  > Résolution (Points par transit) [Défaut: 150] : ") or 70)
+            pts_transit = int(input("  > Résolution (Points par transit) [Défaut: 70] : ") or 70)
 
         # --- 3. EXÉCUTION DU PIPELINE ---
         

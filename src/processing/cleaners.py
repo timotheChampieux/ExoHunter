@@ -4,7 +4,7 @@ import logging
 ##gestion d'erreur
 logger = logging.getLogger(__name__)
 
-def lc_cleaner(lc : lk.LightCurve, window_length:int = 801, sigma: int = 5) -> lk.LightCurve :
+def lc_cleaner(lc : lk.LightCurve, window_length:int = 801, sigma: float = 5) -> lk.LightCurve :
     """ 
     Nettoie la courbe de lumière. Attention : window_length doit être > 3x la durée d'un transit. 
     """

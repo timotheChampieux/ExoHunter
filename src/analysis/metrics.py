@@ -78,14 +78,10 @@ def analyze_planets_metrics(lc : lk.LightCurve,planets_list : list, star_radius:
             logger.warning(f"Candidat {i+1}: Binning trop large, calcul via percentiles.")
             profondeur = max(0, 1.0 - np.nanpercentile(phase_binned.flux, 1))
 
-        
-
-        # On évite les racines carrées de nombres négatifs (au cas ou il y eu un faux positif : profondeur negativ = augmentation de lumière)
         # Rp/Rs = sqrt(profondeur)
         ratio_rayons = np.sqrt(profondeur)
 
         # 1 Rsun = 109.12 Rearth. Formule : Rp = Ratio * Rs * 109.12
-        ratio_rayons = np.sqrt(profondeur)
         rayon_terrestre = ratio_rayons * star_radius * 109.12
         
         # Mise à jour du dictionnaire
