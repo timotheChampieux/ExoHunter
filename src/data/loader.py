@@ -4,7 +4,7 @@ import logging
 ##gestion d'erreur
 logger = logging.getLogger(__name__)
 
-def download_target_data(star_name : str, period_index: int = None, author: str="Kepler") -> lk.LightCurve :         
+def download_target_data(star_name : str, period_index: None, author: str="Kepler") -> lk.LightCurve :         
     """ 
     Recherche, telecharge, assemble data d'une étoile pour un quarter donné et s'adapte a la mission (Kepler, TESS,K2)
     """

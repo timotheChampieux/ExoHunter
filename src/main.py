@@ -37,8 +37,13 @@ def run_pipeline():
         star_radius = float(star_radius) if star_radius else 1.0
         
         period_label = "Secteur" if mission.lower() == "tess" else "Quarter/Campaign"
-        p_index = input(f"Sur quel {period_label} travaillons nous ? (laissez vide pour TOUT attention travailler sur beaucoup de donné demande beaucoup de ressources !) : ")
-        period_index = int(p_index) if p_index else None
+        p_index = input(f"Sur quel(s) {period_label} travaillons-nous ? (ex: 2 ou 2,5,7 — vide pour TOUT attention travailler sur toute les périodes consome énormément) : ")
+        if p_index.strip():
+            period_index = [int(x.strip()) for x in p_index.split(",")]
+            if len(period_index) == 1:
+                period_index = period_index[0]
+        else:
+            period_index = None
 
         # --- 2. CONFIGURATION DE L'ANALYSE ---
         print("\n--- CONFIGURATION DE L'ANALYSE ---")
