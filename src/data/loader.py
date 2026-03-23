@@ -10,7 +10,15 @@ def download_target_data(star_name : str, period_index: None, author: str="Keple
     """
     try :
 
-        search_args = {"author": author}
+        mission_authors = {
+            "kepler": "Kepler",
+            "tess": "SPOC",
+            "k2": "K2"
+        }
+        search_args = {
+            "mission": author,
+            "author": mission_authors.get(author.lower(), author)
+        }
 
         if period_index is not None:
             # TESS utilise 'sector', Kepler utilise 'quarter', K2 utilise 'campaign'

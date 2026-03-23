@@ -5,7 +5,7 @@ import numpy as np
 ##gestion de log
 logger = logging.getLogger(__name__)
 
-def _run_bls_analysis(lc : lk.LightCurve, frequency_factor: int = 10, minimum_period: float = 0.7) -> dict :
+def _run_bls_analysis(lc : lk.LightCurve, frequency_factor: int = 10, minimum_period: float = 0.7,min_transits: int = 3) -> dict :
     """
     Exécute l'algorithme BLS et extrait les 
     statistiques du meilleur pic.
@@ -17,7 +17,7 @@ def _run_bls_analysis(lc : lk.LightCurve, frequency_factor: int = 10, minimum_pe
                 "max_power": 0, "depth_bls": 0, "odd_even_ratio": 1.0}
 
      #beaucoup plus précis que np.linspace pour détecter des transits courts.
-    bls = lc.to_periodogram(method='bls', minimum_period=minimum_period, maximum_period=(lc.time.value.max() - lc.time.value.min())/3, frequency_factor=frequency_factor)    #on recup le meilleur condidat
+    bls = lc.to_periodogram(method='bls', minimum_period=minimum_period, maximum_period=(lc.time.value.max() - lc.time.value.min())/min_transits, frequency_factor=frequency_factor)    #on recup le meilleur condidat
     best_period = bls.period_at_max_power
     best_t0 = bls.transit_time_at_max_power
     best_duration = bls.duration_at_max_power
@@ -68,7 +68,7 @@ def mask_planet(lc : lk.LightCurve, planet_info : dict, mask_width: float = 3.0)
         meta=lc.meta
     )
 
-def planet_detector(lc : lk.LightCurve, max_planets=10, frequency_factor: int = 10, minimum_period: float = 0.7, snr_threshold: float = 7.1, mask_width: float = 3.0, max_alias: int = 5) -> list :  
+def planet_detector(lc : lk.LightCurve, max_planets=10, frequency_factor: int = 10, minimum_period: float = 0.7, snr_threshold: float = 7.1, mask_width: float = 3.0, max_alias: int = 5,min_transits: int = 3) -> list :  
     """
     fonction principale : Cherche des planètes jusqu'à ce que 
     le signal soit trop faible ou le maximum atteint (sécurité contre les boucles infinies).
@@ -87,7 +87,7 @@ def planet_detector(lc : lk.LightCurve, max_planets=10, frequency_factor: int = 
 
         #analyse de la courbe actuelle
         logger.info(f"Tentative de détection n°{len(planets_found) + 1} (itération {iteration})...")
-        result = _run_bls_analysis(current_lc, frequency_factor=frequency_factor, minimum_period=minimum_period)       
+        result = _run_bls_analysis(current_lc, frequency_factor=frequency_factor, minimum_period=minimum_period,min_transits=min_transits)       
         logger.info(f"Analyse BLS terminée.")
         #critère de validation
         if result["snr"] > snr_threshold :
@@ -119,6 +119,11 @@ def planet_detector(lc : lk.LightCurve, max_planets=10, frequency_factor: int = 
             # Test binaire à éclipses AVANT ajout dans la liste
             baseline = current_lc.time.value.max() - current_lc.time.value.min()
             n_transits = baseline / result["period"]
+            if result["odd_even_ratio"] < 0:
+                logger.warning(f"Signal rejeté (odd/even ratio = {result['odd_even_ratio']:.3f}) — artefact (ratio négatif).")
+                current_lc = mask_planet(current_lc, result, mask_width=mask_width)
+                continue
+
             if n_transits >= 10 and abs(result["odd_even_ratio"] - 1.0) > 0.3:
                 logger.warning(f"Signal rejeté (odd/even ratio = {result['odd_even_ratio']}) — probable binaire à éclipses.")
                 current_lc = mask_planet(current_lc, result, mask_width=mask_width)

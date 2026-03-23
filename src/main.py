@@ -86,6 +86,7 @@ def run_pipeline():
         snr_threshold = 7.1
         mask_width = 3.0
         max_alias = 5
+        min_transits = 3
         # Métriques
         pts_transit = 70
 
@@ -117,6 +118,13 @@ def run_pipeline():
             print("      Standard : 10. Signaux forts (SNR > 30) : 15-20. Signaux faibles : 5-8.")
             print("      Impact direct sur le temps de calcul (x2 si divisé par 2).")
             freq_factor = _ask_int("  Frequency factor", 10)
+
+            print("\n  ℹ️  Transits minimum : nombre minimum de transits exigé dans la baseline.")
+            print("      Détermine la période maximale cherchée (baseline / min_transits).")
+            print("      3 = conservateur, rejette les faux positifs longue période.")
+            print("      2 = nécessaire si la planète a une période > 1/3 de la baseline.")
+            print("      Standard : 3. K2 campaigns ou TESS secteur unique : 2.")
+            min_transits = _ask_int("  Transits minimum", 3)
 
             print("\n  ℹ️  Période minimale de recherche (en jours).")
             print("      Standard : 0.7j. Planètes ultra-courtes (USP) : 0.3-0.5j.")
@@ -170,6 +178,8 @@ def run_pipeline():
             print(f"  Largeur masque : {mask_width}x")
             print(f"  Max alias      : {max_alias}")
             print(f"  Pts/transit    : {pts_transit}")
+            print(f"  Min transits   : {min_transits}")
+
         print("-"*60)
         
         confirm = input("\n  Lancer l'analyse ? (O/n) : ").strip().lower()
@@ -199,7 +209,8 @@ def run_pipeline():
             minimum_period=min_period,
             snr_threshold=snr_threshold,
             mask_width=mask_width,
-            max_alias=max_alias
+            max_alias=max_alias,
+            min_transits=min_transits
         )
 
         # Étape 4 : Métriques physiques
