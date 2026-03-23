@@ -15,29 +15,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ExoHunter")
 
+
+def _ask_float(prompt: str, default: float) -> float:
+    """Demande un float à l'utilisateur avec valeur par défaut."""
+    val = input(f"{prompt} [Défaut: {default}] : ")
+    return float(val) if val.strip() else default
+
+def _ask_int(prompt: str, default: int) -> int:
+    """Demande un entier à l'utilisateur avec valeur par défaut."""
+    val = input(f"{prompt} [Défaut: {default}] : ")
+    return int(val) if val.strip() else default
+
+
 def run_pipeline():
     """
     Exécute le pipeline complet de détection d'exoplanètes.
     """
     print("\n" + "="*60)
-    print("    EXOHUNTER v1.0    ")
+    print("          EXOHUNTER v2.0")
+    print("   Pipeline de détection d'exoplanètes")
     print("="*60 + "\n")
 
     try:
-        #CONFIGURATION DE LA CIBLE 
-        print("--- CONFIGURATION DE LA CIBLE ---")
+        # =============================================
+        # 1. CIBLE
+        # =============================================
+        print("--- CIBLE ---\n")
 
-        mission = input("Mission (Kepler, TESS, K2) [Défaut: Kepler] : ") or "Kepler"
+        mission = input("Mission (Kepler, TESS, K2) [Défaut: Kepler] : ").strip() or "Kepler"
 
-        target_star = input("Nom de l'étoile (ex: Kepler-10, Pi Mensae) : ")
+        target_star = input("Nom de l'étoile (ex: Kepler-10, Pi Mensae) : ").strip()
         if not target_star:
             raise ValueError("Le nom de l'étoile est obligatoire.")
 
-        star_radius = input("Rayon de l'étoile (en R_sun) !!! Très important !!! [Défaut: 1.0] : ")
-        star_radius = float(star_radius) if star_radius else 1.0
-        
+        print("\n  ℹ️  Le rayon stellaire est crucial pour le calcul du rayon planétaire.")
+        print("      Consultez le NASA Exoplanet Archive ou Simbad pour une valeur précise.")
+        print("      Une erreur de 10% sur le rayon stellaire = 10% d'erreur sur le rayon planétaire.\n")
+        star_radius = _ask_float("Rayon de l'étoile (en R_sun)", 1.0)
+
         period_label = "Secteur" if mission.lower() == "tess" else "Quarter/Campaign"
-        p_index = input(f"Sur quel(s) {period_label} travaillons-nous ? (ex: 2 ou 2,5,7 — vide pour TOUT attention travailler sur toute les périodes consome énormément) : ")
+        print(f"\n  ℹ️  Plus de {period_label}s = plus de transits = meilleure précision.")
+        print("      Mais le temps de calcul augmente fortement (x2 par période ajoutée).")
+        print("      Recommandation : 2-4 périodes pour commencer.\n")
+        p_index = input(f"  {period_label}(s) (ex: 2 ou 2,5,7 — vide pour TOUT) : ")
         if p_index.strip():
             period_index = [int(x.strip()) for x in p_index.split(",")]
             if len(period_index) == 1:
@@ -45,41 +65,146 @@ def run_pipeline():
         else:
             period_index = None
 
-        # --- 2. CONFIGURATION DE L'ANALYSE ---
-        print("\n--- CONFIGURATION DE L'ANALYSE ---")
-        max_p = input("Nombre max de planètes à chercher [Défaut: 5] : (Si il y a beaucoup de planètes a trouver cela demandera beaucoup de ressources) ")
-        max_p = int(max_p) if max_p else 5
-        
-        advanced = input("Modifier les paramètres experts ? (o/N) : ").lower()
+        # =============================================
+        # 2. DÉTECTION
+        # =============================================
+        print("\n--- DÉTECTION ---\n")
 
-        # Valeurs par défaut (Standard de recherche)
-        sigma_val = 5
+        max_p = _ask_int("Nombre max de planètes à chercher", 5)
+
+        print("\n  Voulez-vous configurer les paramètres avancés ?")
+        print("  Les valeurs par défaut conviennent à la majorité des cas.\n")
+        advanced = input("  Paramètres avancés ? (o/N) : ").strip().lower()
+
+        # --- Valeurs par défaut ---
+        # Nettoyage
+        sigma_val = 5.0
         win_len = 801
+        # Détection BLS
+        freq_factor = 10
+        min_period = 0.7
+        snr_threshold = 7.1
+        mask_width = 3.0
+        max_alias = 5
+        # Métriques
         pts_transit = 70
 
         if advanced == 'o':
-            sigma_val = int(input("  > Seuil de nettoyage (Sigma) [Défaut: 5] : ") or 5)
-            win_len = int(input("  > Fenêtre de lissage (Window Length) [Défaut: 801] : ") or 801)
-            pts_transit = int(input("  > Résolution (Points par transit) [Défaut: 70] : ") or 70)
+            print("\n" + "-"*50)
+            print("  NETTOYAGE DE LA COURBE")
+            print("-"*50)
 
-        # --- 3. EXÉCUTION DU PIPELINE ---
+            print("\n  ℹ️  Sigma : seuil de rejet des points aberrants.")
+            print("      Plus bas = plus agressif (risque de couper des transits profonds).")
+            print("      Plus haut = plus permissif (garde plus de bruit).")
+            print("      Standard : 5. Étoile active/bruitée : 3-4. Signal faible : 6-7.")
+            sigma_val = _ask_float("  Sigma", 5.0)
+
+            print("\n  ℹ️  Fenêtre de lissage : taille du filtre pour corriger la variabilité stellaire.")
+            print("      DOIT être > 3x la durée du transit le plus long attendu.")
+            print("      Trop petit = écrase les transits (underfitting dangereux).")
+            print("      Trop grand = laisse des tendances longues (bruit résiduel).")
+            print("      Standard : 801 (~2j pour Kepler long cadence).")
+            win_len = _ask_int("  Fenêtre de lissage (Window Length)", 801)
+
+            print("\n" + "-"*50)
+            print("  RECHERCHE BLS")
+            print("-"*50)
+
+            print("\n  ℹ️  Frequency factor : densité de la grille de recherche en fréquence.")
+            print("      Plus élevé = calcul plus rapide mais grille plus grossière.")
+            print("      Trop élevé = risque de rater des signaux faibles (SNR < 15).")
+            print("      Standard : 10. Signaux forts (SNR > 30) : 15-20. Signaux faibles : 5-8.")
+            print("      Impact direct sur le temps de calcul (x2 si divisé par 2).")
+            freq_factor = _ask_int("  Frequency factor", 10)
+
+            print("\n  ℹ️  Période minimale de recherche (en jours).")
+            print("      Standard : 0.7j. Planètes ultra-courtes (USP) : 0.3-0.5j.")
+            print("      Baisser cette valeur augmente significativement le temps de calcul.")
+            min_period = _ask_float("  Période minimale (jours)", 0.7)
+
+            print("\n  ℹ️  Seuil SNR : signal minimum pour considérer un candidat.")
+            print("      Standard scientifique : 7.0-7.5.")
+            print("      Plus bas = plus de candidats mais plus de faux positifs.")
+            print("      Plus haut = moins de faux positifs mais risque de rater des petites planètes.")
+            snr_threshold = _ask_float("  Seuil SNR", 7.1)
+
+            print("\n  ℹ️  Largeur du masque de transit (multiplicateur de la durée).")
+            print("      Contrôle la zone masquée autour de chaque transit détecté.")
+            print("      Trop petit (< 2) = résidus de transit qui polluent la recherche suivante.")
+            print("      Trop grand (> 4) = perte de données, profondeur sous-estimée.")
+            print("      Standard : 3.0. Planète à période ultra-courte (beaucoup de transits) : 3-4.")
+            print("      Planète à longue période (peu de transits) : 2.0.")
+            mask_width = _ask_float("  Largeur du masque", 3.0)
+
+            print("\n  ℹ️  Alias consécutifs max : nombre de faux signaux tolérés avant d'arrêter.")
+            print("      Le BLS peut retrouver des résidus de planètes déjà masquées.")
+            print("      Standard : 5. Si planète ultra-courte (P < 1j) détectée en premier : 5-8.")
+            max_alias = _ask_int("  Alias consécutifs max", 5)
+
+            print("\n" + "-"*50)
+            print("  MESURE DES RAYONS")
+            print("-"*50)
+
+            print("\n  ℹ️  Points par transit : résolution du repliement de phase pour mesurer la profondeur.")
+            print("      Plus élevé = plus précis mais nécessite beaucoup de transits.")
+            print("      Standard : 70. Peu de transits (< 5) : 30-50. Beaucoup (> 50) : 100-150.")
+            pts_transit = _ask_int("  Points par transit", 70)
+
+        # =============================================
+        # 3. RÉSUMÉ DE CONFIGURATION
+        # =============================================
+        print("\n" + "-"*60)
+        print("  RÉSUMÉ DE LA CONFIGURATION")
+        print("-"*60)
+        print(f"  Cible          : {target_star} ({mission})")
+        print(f"  Rayon stellaire: {star_radius} R_sun")
+        print(f"  Périodes       : {period_index if period_index else 'TOUTES'}")
+        print(f"  Max planètes   : {max_p}")
+        if advanced == 'o':
+            print(f"  Sigma          : {sigma_val}")
+            print(f"  Window length  : {win_len}")
+            print(f"  Freq. factor   : {freq_factor}")
+            print(f"  Période min    : {min_period}j")
+            print(f"  Seuil SNR      : {snr_threshold}")
+            print(f"  Largeur masque : {mask_width}x")
+            print(f"  Max alias      : {max_alias}")
+            print(f"  Pts/transit    : {pts_transit}")
+        print("-"*60)
         
-        # Étape A : Téléchargement
-        logger.info(f"Étape 1 : Acquisition des données ({mission})...")
+        confirm = input("\n  Lancer l'analyse ? (O/n) : ").strip().lower()
+        if confirm == 'n':
+            print("  Analyse annulée.")
+            return
+
+        # =============================================
+        # 4. EXÉCUTION DU PIPELINE
+        # =============================================
+        print()
+
+        # Étape 1 : Téléchargement
+        logger.info(f"Étape 1/4 : Acquisition des données ({mission})...")
         lc_raw = download_target_data(target_star, author=mission, period_index=period_index)
 
-        # Étape B : Nettoyage (Utilisation de win_len et sigma)
-        logger.info(f"Étape 2 : Nettoyage (Sigma={sigma_val}, Window={win_len})...")
+        # Étape 2 : Nettoyage
+        logger.info(f"Étape 2/4 : Nettoyage (Sigma={sigma_val}, Window={win_len})...")
         lc_clean = lc_cleaner(lc_raw, window_length=win_len, sigma=sigma_val)
 
-        # Étape C : Détection itérative
-        logger.info(f"Étape 3 : Recherche itérative (Max {max_p} planètes)...")
-        planets_found = planet_detector(lc_clean, max_planets=max_p)
+        # Étape 3 : Détection itérative
+        logger.info(f"Étape 3/4 : Recherche itérative (Max {max_p} planètes)...")
+        planets_found = planet_detector(
+            lc_clean, 
+            max_planets=max_p,
+            frequency_factor=freq_factor,
+            minimum_period=min_period,
+            snr_threshold=snr_threshold,
+            mask_width=mask_width,
+            max_alias=max_alias
+        )
 
-        # Étape D : Métriques physiques
+        # Étape 4 : Métriques physiques
         if planets_found:
-            logger.info(f"Étape 4 : Calcul des rayons (Résolution={pts_transit})...")
-            # On passe pts_transit pour que metrics utilise ton binning adaptatif
+            logger.info(f"Étape 4/4 : Calcul des rayons (Résolution={pts_transit} pts/transit)...")
             final_results = analyze_planets_metrics(
                 lc_clean, 
                 planets_found, 
@@ -87,36 +212,67 @@ def run_pipeline():
                 points_per_transit=pts_transit
             )
             
-            # --- 4. AFFICHAGE DES RÉSULTATS ---
-            print("\n" + "!"*60)
-            print(f"   RÉSULTATS DE L'ANALYSE POUR {target_star.upper()}")
-            print("!"*60)
+            # =============================================
+            # 5. RÉSULTATS
+            # =============================================
+            print("\n" + "="*60)
+            print(f"  RÉSULTATS — {target_star.upper()} ({mission})")
+            print(f"  {len(final_results)} candidat(s) détecté(s)")
+            print("="*60)
             
             for i, p in enumerate(final_results):
-                print(f"\n[CANDIDATE {i+1}]")
-                print(f" > Période orbitale : {p['period']:.4f} jours")
-                print(f" > Rayon            : {p['rayon_terrestre']:.2f} R_terrestre ({p['rayon_km']:.0f} km)")
-                print(f" > Profondeur       : {p['depth_ppm']:.0f} ppm")
-                print(f" > Score (SNR)      : {p['snr']:.2f}")
+                print(f"\n  {'─'*50}")
+                print(f"  CANDIDAT {i+1}")
+                print(f"  {'─'*50}")
+                print(f"  Période orbitale  : {p['period']:.4f} jours")
+                print(f"  Rayon             : {p['rayon_terrestre']:.2f} R_terre ({p['rayon_km']:.0f} km)")
+                print(f"  Profondeur        : {p['depth_ppm']:.0f} ppm")
+                print(f"  SNR               : {p['snr']:.2f}")
+                print(f"  Ratio pair/impair : {p['odd_even_ratio']:.3f}")
                 
-                # Interprétation
-                if p['rayon_terrestre'] < 1.5:
-                    print(" > Nature probable  : Rocheuse (Tellurique)")
-                elif p['rayon_terrestre'] < 4.0:
-                    print(" > Nature probable  : Neptune-like / Super-Terre")
+                # Classification
+                r = p['rayon_terrestre']
+                if r < 1.25:
+                    nature = "Sous-Terre / Rocheuse"
+                elif r < 2.0:
+                    nature = "Terre / Super-Terre (probablement rocheuse)"
+                elif r < 4.0:
+                    nature = "Mini-Neptune (enveloppe gazeuse probable)"
+                elif r < 10.0:
+                    nature = "Neptune-like (géante de glace)"
                 else:
-                    print(" > Nature probable  : Géante Gazeuse")
+                    nature = "Géante gazeuse (type Jupiter)"
+                print(f"  Nature probable   : {nature}")
+
+                # Avertissements
+                if p['snr'] < 10:
+                    print(f"  ⚠️  SNR faible — candidat à confirmer avec plus de données.")
+                if p['odd_even_ratio'] > 1.2 or p['odd_even_ratio'] < 0.8:
+                    baseline = lc_clean.time.value.max() - lc_clean.time.value.min()
+                    n_tr = baseline / p['period']
+                    if n_tr >= 10:
+                        print(f"  ⚠️  Ratio pair/impair suspect ({p['odd_even_ratio']:.2f}) — vérifier si binaire à éclipses.")
+                    else:
+                        print(f"  ℹ️  Ratio pair/impair variable ({p['odd_even_ratio']:.2f}) — normal avec peu de transits ({n_tr:.0f}).")
+
         else:
-            print(f"\nAucune planète détectée pour {target_star} avec un SNR > 7.")
+            print(f"\n  Aucune planète détectée pour {target_star} avec un SNR > {snr_threshold}.")
+            print("  Suggestions :")
+            print("    - Ajouter des périodes d'observation pour augmenter le SNR")
+            print("    - Baisser le seuil SNR (risque de faux positifs)")
+            print("    - Vérifier le nom de la cible et la mission")
 
     except ValueError as ve:
         logger.error(f"Erreur de saisie : {ve}")
+    except KeyboardInterrupt:
+        print("\n\n  Analyse interrompue par l'utilisateur.")
     except Exception as e:
         logger.error(f"Erreur système : {e}")
 
     print("\n" + "="*60)
-    print("                ANALYSE TERMINÉE")
+    print("              ANALYSE TERMINÉE")
     print("="*60 + "\n")
+
 
 if __name__ == "__main__":
     run_pipeline()

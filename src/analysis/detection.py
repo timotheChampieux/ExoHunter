@@ -5,7 +5,7 @@ import numpy as np
 ##gestion de log
 logger = logging.getLogger(__name__)
 
-def _run_bls_analysis(lc : lk.LightCurve) -> dict : 
+def _run_bls_analysis(lc : lk.LightCurve, frequency_factor: int = 10, minimum_period: float = 0.7) -> dict :
     """
     Exécute l'algorithme BLS et extrait les 
     statistiques du meilleur pic.
@@ -17,8 +17,7 @@ def _run_bls_analysis(lc : lk.LightCurve) -> dict :
                 "max_power": 0, "depth_bls": 0, "odd_even_ratio": 1.0}
 
      #beaucoup plus précis que np.linspace pour détecter des transits courts.
-    bls = lc.to_periodogram(method='bls', minimum_period=0.7, maximum_period=(lc.time.value.max() - lc.time.value.min())/3, frequency_factor=10)    
-    #on recup le meilleur condidat
+    bls = lc.to_periodogram(method='bls', minimum_period=minimum_period, maximum_period=(lc.time.value.max() - lc.time.value.min())/3, frequency_factor=frequency_factor)    #on recup le meilleur condidat
     best_period = bls.period_at_max_power
     best_t0 = bls.transit_time_at_max_power
     best_duration = bls.duration_at_max_power
@@ -37,7 +36,7 @@ def _run_bls_analysis(lc : lk.LightCurve) -> dict :
         "odd_even_ratio": round(odd_even_ratio, 3) #ratio pair/impair pour filtrer les faux positifs
     }
 
-def mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
+def mask_planet(lc : lk.LightCurve, planet_info : dict, mask_width: float = 3.0) ->  lk.LightCurve :    
     """
     Masque les transits d'une planète pour permettre 
     la recherche de signaux plus faibles (d'autre planètes).
@@ -46,8 +45,7 @@ def mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
     """
     period = planet_info["period"]
     t0 = planet_info["transit_time"]
-    mask_half_width = planet_info["duration"] * 2.0  # marge 1.5x pour supprimer les résidus d'ingress/egress
-
+    mask_half_width = planet_info["duration"] * mask_width
     #numpy pur aucun passage par Astropy creant des soucis a priori inévitables
     time = np.asarray(lc.time.value, dtype=float)
     flux = np.asarray(lc.flux.value, dtype=float)
@@ -70,7 +68,7 @@ def mask_planet(lc : lk.LightCurve, planet_info : dict) ->  lk.LightCurve :
         meta=lc.meta
     )
 
-def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list : 
+def planet_detector(lc : lk.LightCurve, max_planets=10, frequency_factor: int = 10, minimum_period: float = 0.7, snr_threshold: float = 7.1, mask_width: float = 3.0, max_alias: int = 5) -> list :  
     """
     fonction principale : Cherche des planètes jusqu'à ce que 
     le signal soit trop faible ou le maximum atteint (sécurité contre les boucles infinies).
@@ -89,11 +87,11 @@ def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list :
 
         #analyse de la courbe actuelle
         logger.info(f"Tentative de détection n°{len(planets_found) + 1} (itération {iteration})...")
-        result = _run_bls_analysis(current_lc)
+        result = _run_bls_analysis(current_lc, frequency_factor=frequency_factor, minimum_period=minimum_period)       
         logger.info(f"Analyse BLS terminée.")
         #critère de validation
-        if result["snr"] > 7.1 :
-            #Filtre alias : rejette si la période est trop proche d'une planète déjà trouvée
+        if result["snr"] > snr_threshold :
+                        #Filtre alias : rejette si la période est trop proche d'une planète déjà trouvée
             is_alias = False
             matched_harmonic = None
             for known in planets_found:
@@ -113,9 +111,9 @@ def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list :
                 # car le BLS sur le résidu peut retourner une durée aberrante
                 if matched_harmonic == 1:
                     result["duration"] = known["duration"]
-                current_lc = mask_planet(current_lc, result)
-                if harmonic_alias_count >= 5:
-                    logger.info("Fin de recherche : signal épuisé (3 alias consécutifs).")
+                current_lc = mask_planet(current_lc, result, mask_width=mask_width)
+                if harmonic_alias_count >= max_alias:
+                    logger.info(f"Fin de recherche : signal épuisé ({max_alias} alias consécutifs).")
                     break
                 continue
             # Test binaire à éclipses AVANT ajout dans la liste
@@ -123,7 +121,7 @@ def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list :
             n_transits = baseline / result["period"]
             if n_transits >= 10 and abs(result["odd_even_ratio"] - 1.0) > 0.3:
                 logger.warning(f"Signal rejeté (odd/even ratio = {result['odd_even_ratio']}) — probable binaire à éclipses.")
-                current_lc = mask_planet(current_lc, result)
+                current_lc = mask_planet(current_lc, result, mask_width=mask_width)
                 continue
 
             logger.info(f"Planète détectée ! Période: {result['period']:.3f} j | SNR: {result['snr']:.2f}")
@@ -133,7 +131,7 @@ def planet_detector(lc : lk.LightCurve, max_planets=10 ) -> list :
             #On masque la planète pour le tour suivant
             if max_planets > 1 :
                 logger.info("Début du masquage de la planète...")
-                current_lc = mask_planet(current_lc,result)
+                current_lc = mask_planet(current_lc, result, mask_width=mask_width)
                 logger.info("Masquage réussi.")
                 
         else : 
