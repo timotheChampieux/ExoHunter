@@ -145,8 +145,8 @@ Un rapport d'audit détaillé est disponible dans `docs/AUDIT_EXOHUNTER.md`.
 ## Installation
 
 ```bash
-git clone https://github.com/<votre-repo>/Exoplanet_Detection_Project.git
-cd Exoplanet_Detection_Project
+git clone https://github.com/timotheChampieux/ExoHunter.git
+cd ExoHunter
 pip install -r requirements.txt
 ```
 
